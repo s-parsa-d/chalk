@@ -142,6 +142,49 @@ const customChalk = new Chalk({level: 0});
 
 Both the `level` option and the `level` property throw for anything that is not an integer from 0 to 3. Omit the option, or pass `undefined`, to have the level detected instead.
 
+### chalk.defineTheme(name, styler)
+
+Define a reusable theme. The name becomes directly accessible as a style on Chalk instances and builders, just like a built-in style.
+
+`styler` can be a Chalk style chain (e.g. `chalk.bold.red`) or an object with `open` and `close` ANSI escape codes (e.g. loaded from a config file). Redefining an existing theme name overwrites it.
+
+The theme registry is shared by all Chalk instances, including `chalkStderr`.
+
+```js
+import chalk from 'chalk';
+
+chalk.defineTheme('danger', chalk.bold.red);
+chalk.defineTheme('success', chalk.hex('#00C853'));
+chalk.defineTheme('brand', {open: '\u001B[38;5;208m', close: '\u001B[39m'});
+
+console.log(chalk.danger('Something went wrong!'));
+console.log(chalk.success.bold('Done ✓'));
+```
+
+Theme names must not conflict with built-in styles or properties like `red`, `visible`, or `level`.
+
+### chalk.theme(name)
+
+Get a registered theme as a style by name. Useful when the theme name is not statically known, for example read from configuration. For statically known names, prefer direct property access (e.g. `chalk.danger`).
+
+The returned style can be called as a method and chained with other styles, exactly like any other style.
+
+```js
+const themeName = getThemeNameFromConfig();
+console.log(chalk.theme(themeName)('Something went wrong!'));
+```
+
+Throws if the theme is not defined.
+
+### chalk.hasTheme(name)
+
+Check whether a theme with the given name is registered.
+
+```js
+chalk.hasTheme('danger');
+//=> true
+```
+
 ### supportsColor
 
 Detect whether the terminal [supports color](https://github.com/chalk/supports-color). Used internally and handled for you, but exposed for convenience.

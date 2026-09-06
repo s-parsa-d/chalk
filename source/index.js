@@ -14,6 +14,9 @@ const LEVEL = Symbol('LEVEL');
 
 const styles = Object.create(null);
 
+// The theme registry is module-level and shared by every instance, including `chalkStderr`, mirroring how the style getters are shared through the common `proto`. Themes are app-wide configuration, usually defined once at startup and consumed wherever any Chalk instance is imported, so per-instance registries would force users to define each theme once per instance.
+const themes = new Map();
+
 const assertValidLevel = level => {
 	if (!Number.isSafeInteger(level) || level < 0 || level > 3) {
 		throw new Error('The `level` should be an integer from 0 to 3');
@@ -133,6 +136,23 @@ for (const model of usedModels) {
 	}
 }
 
+styles.theme = {
+	get() {
+		const themeFunction = name => {
+			const theme = themes.get(name);
+
+			if (theme === undefined) {
+				throw new Error(`Chalk theme "${name}" is not defined. Register it first with chalk.defineTheme().`);
+			}
+
+			return createBuilder(this, createStyler(theme.open, theme.close, this[STYLER]), this[IS_EMPTY]);
+		};
+
+		Object.defineProperty(this, 'theme', {value: themeFunction});
+		return themeFunction;
+	},
+};
+
 const proto = Object.defineProperties(
 	() => {},
 	{
@@ -232,9 +252,67 @@ const applyStyle = (self, string) => {
 	return openAll + string + closeAll;
 };
 
+// Normalize either accepted shape to the `{open, close}` codes the theme registry stores. A style chain contributes the accumulated codes of the whole chain (`openAll`/`closeAll`), so a theme opens and closes as a single unit, exactly like any raw `{open, close}` theme.
+const normalizeThemeStyler = styler => {
+	// A Chalk builder is a function carrying the internal styler link, which always holds strings once the chain contains any real style.
+	if (typeof styler === 'function' && typeof styler[STYLER]?.openAll === 'string') {
+		const {openAll, closeAll} = styler[STYLER];
+		return {open: openAll, close: closeAll};
+	}
+
+	if (typeof styler === 'object' && styler !== null && typeof styler.open === 'string' && typeof styler.close === 'string') {
+		return {open: styler.open, close: styler.close};
+	}
+
+	throw new TypeError('The theme `styler` must be a Chalk style chain (e.g. `chalk.bold.red`) or an object with `open` and `close` ANSI escape code strings (e.g. `{open: \'\\u001B[31m\', close: \'\\u001B[39m\'}`).');
+};
+
+// Install a getter for the theme name on both shared prototypes, so the name can be used directly like any built-in style (`chalk.danger(...)`, `chalk.danger.bold(...)`). The getter reads the registry on every access instead of caching a builder on the instance, so redefining a theme (last write wins) is observed even after the property has already been used. Themes are never removed, so a previously installed getter for the same name is simply reused.
+const installThemeGetter = name => {
+	if (themes.has(name)) {
+		return;
+	}
+
+	for (const object of [proto, createChalk.prototype]) {
+		if (Object.hasOwn(object, name)) {
+			throw new TypeError(`The theme name "${name}" is reserved by Chalk.`);
+		}
+	}
+
+	const descriptor = {
+		get() {
+			const {open, close} = themes.get(name);
+			return createBuilder(this, createStyler(open, close, this[STYLER]), this[IS_EMPTY]);
+		},
+	};
+
+	Object.defineProperty(proto, name, descriptor);
+	Object.defineProperty(createChalk.prototype, name, descriptor);
+};
+
+const defineTheme = (name, styler) => {
+	if (typeof name !== 'string' || name === '') {
+		throw new TypeError('The theme `name` must be a non-empty string.');
+	}
+
+	// Normalize first so an invalid styler cannot leave a half-registered theme behind.
+	const theme = normalizeThemeStyler(styler);
+	installThemeGetter(name);
+
+	// Redefining an existing theme name overwrites it (last write wins).
+	themes.set(name, theme);
+};
+
+const hasTheme = name => themes.has(name);
+
 // `level` lives on the prototype rather than on each instance, so it costs nothing to construct an instance and matches how builders already expose it. It is inherited rather than own, so it does not show up in `Object.keys()`, same as for a builder.
 // eslint-disable-next-line unicorn/no-top-level-side-effects -- The style getters must be installed at module load.
-Object.defineProperties(createChalk.prototype, {...styles, level: levelDescriptor});
+Object.defineProperties(createChalk.prototype, {
+	...styles,
+	level: levelDescriptor,
+	defineTheme: {value: defineTheme},
+	hasTheme: {value: hasTheme},
+});
 
 const chalk = createChalk();
 export const chalkStderr = createChalk({level: stderrColor ? stderrColor.level : 0});
