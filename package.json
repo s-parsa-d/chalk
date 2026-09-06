@@ -88,5 +88,8 @@
 		"exclude": [
 			"source/vendor"
 		]
+	},
+	"dependencies": {
+		"chalk": "^6.0.0"
 	}
 }

@@ -178,6 +178,69 @@ export interface ChalkInstance {
 	underlineAnsi256: (index: number) => this;
 
 	/**
+	Define a reusable theme. The name becomes directly accessible as a style on Chalk instances and builders, just like a built-in style, and can also be applied dynamically with [`theme()`](#theme).
+
+	The theme registry is shared by all Chalk instances, including `chalkStderr`. Redefining an existing theme name overwrites it.
+
+	@param name - Name of the theme. Must be a non-empty string that does not conflict with a built-in style or property.
+	@param styler - A Chalk style chain (e.g. `chalk.bold.red`) or an object with `open` and `close` ANSI escape codes (e.g. loaded from a config file).
+
+	@throws If `name` is not a non-empty string, conflicts with a built-in style or property, or `styler` is neither a Chalk style chain nor an object with `open` and `close` string values.
+
+	@example
+	```
+	import chalk from 'chalk';
+
+	chalk.defineTheme('danger', chalk.bold.red);
+	chalk.defineTheme('brand', {open: '\u001B[38;5;208m', close: '\u001B[39m'});
+
+	console.log(chalk.danger('Something went wrong!'));
+	console.log(chalk.brand.underline('Chalk'));
+	```
+
+	For TypeScript, declare statically known theme names on `ChalkInstance` via module augmentation so they type-check:
+
+	@example
+	```
+	// types.d.ts
+	import type {} from 'chalk';
+
+	declare module 'chalk' {
+		interface ChalkInstance {
+			danger: ChalkInstance;
+		}
+	}
+	```
+	*/
+	defineTheme: (name: string, styler: this | {readonly open: string; readonly close: string}) => void;
+
+	/**
+	Get a registered theme as a style by name. Useful when the theme name is not statically known, for example read from configuration. For statically known names, prefer direct property access (e.g. `chalk.danger`).
+
+	The returned style can be called as a method and chained with other styles, exactly like any other style.
+
+	@param name - Name of a theme registered with [`defineTheme()`](#definetheme).
+
+	@throws If the theme is not registered.
+
+	@example
+	```
+	import chalk from 'chalk';
+
+	chalk.defineTheme('danger', chalk.bold.red);
+
+	console.log(chalk.theme('danger')('Something went wrong!'));
+	console.log(chalk.theme('danger').underline('Something went wrong!'));
+	```
+	*/
+	theme: (name: string) => this;
+
+	/**
+	Check whether a theme with the given name is registered.
+	*/
+	hasTheme: (name: string) => boolean;
+
+	/**
 	Modifier: Reset the current style.
 	*/
 	readonly reset: this;
